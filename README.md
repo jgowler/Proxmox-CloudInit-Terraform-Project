@@ -61,3 +61,90 @@ Confirm:
 
 Finish
 ```
+
+---
+
+## Step 2 - Add a Cloud-init drive:
+
+Next, I will need to add a Cloud-init drive to the VM to allow configurations, such as user creation and SSH keys, during deployment.
+
+```
+VM > Hardware > Add > Cloudinit Drive:
+- Bus/Device: IDE 0
+- Storage: "local-lvm"
+
+Add
+```
+I also removed the CD/DVD drive as this will not be needed, and added a Serial Port:
+
+```
+Hardware > Add > Serial Port > 0 > Add
+```
+
+Now to add the Cloud Image. For this template I have chosen the current version of "Ubuntu Server 24.04 LTS (Noble Numbat) daily builds" from https://cloud-images.ubuntu.com/.
+
+I ran `wget https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img` to get the image downloaded to Proxmox.
+
+Then, converted to QCow2:
+
+`qemu-img convert -f raw -O qcow2 noble-server-cloudimg-amd64.img cloud-init-img.qcow2`
+
+To check this I ran `qemu-img info cloud-init-img.qcow2`. This returned the following information:
+
+```
+image: cloud-init-img.qcow2
+file format: qcow2
+virtual size: 32 GiB (34359738368 bytes)
+disk size: 591 MiB
+cluster_size: 65536
+Format specific information:
+    compat: 1.1
+    compression type: zlib
+    lazy refcounts: false
+    refcount bits: 16
+    corrupt: false
+    extended l2: false
+Child node '/file':
+    filename: cloud-init-img.qcow2
+    protocol type: file
+    file length: 591 MiB (619381248 bytes)
+    disk size: 591 MiB
+```
+
+"Virtual size" shows the max size of the disk, whereas disk size shows the current storage being used by the disk (591 MiB).
+
+Next the disk needs to be attached to the VM:
+
+`qm importdisk 9000 cloud-init-img.qcow2 local-lvm`
+
+Under Hardware for the VM there is an "Unused Disk 0". This is the that was just attached that now needs to be configured:
+
+```
+Hardware > "Unused Disk 0" > Edit:
+
+Disk
+- Discard: Enabled (If using an SSD)
+- SSD Emulation: Enabled (If using SSD)
+
+Add
+```
+
+The disk will now be listed as a "Hard DIsk (scsi0)" unless any other settings were changed here.
+
+Next, the Boot Order will be changed to disable the Network option and enable the scsi0 disk that was attached.
+
+---
+
+## Step 3 - Convert to template
+
+The final step in this proces is to convert the VM to a template. 
+
+### NOTE: Once a VM is converted to a template it cannot be converted back.
+
+Right-click the VM form the left panel > "Convert to template" > Yes
+
+That's it, a CloudInit Ubuntu template to use in the Terraform deployment.
+
+---
+
+In the next step i will set up a user account and API Token for Terraform to deploy the VM's to Proxmox.
