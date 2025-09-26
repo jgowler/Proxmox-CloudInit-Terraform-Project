@@ -147,4 +147,4 @@ That's it, a CloudInit Ubuntu template to use in the Terraform deployment.
 
 ---
 
-In the next step i will set up a user account and API Token for Terraform to deploy the VM's to Proxmox.
+In the next step i will [set up a user account and API Token for Terraform to deploy the VM's to Proxmox](https://github.com/jgowler/Proxmox-CloudInit-Terraform-Project/tree/main/Proxmox-files).
