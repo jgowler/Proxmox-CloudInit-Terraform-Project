@@ -8,6 +8,8 @@ In this step of the projject I will need to create a user account and API Token 
 
 1. Create a user account in Proxmox for Terraform to use.
 2. Create an API Token with the specific permissions to connect to Proxmox.
+3. Create a custom role in Proxmox for the API Token.
+4. Assign the role to the API Token.
 
 ---
 
@@ -42,6 +44,10 @@ Add
 ```
 
 Here you will be presented with the Token ID and the Secret. Take note of these as once this box is closed you will not have another chance to take this info!
+
+---
+
+## Step 3 - Create a custom role in Proxmox for the API Token
 
 Next, a Role will need to be created to apply to the API Token
 
@@ -86,6 +92,10 @@ SDN.Use – Use SDN objects
 
 Create
 ```
+
+---
+
+## Step 4 - Assign the role to the API Token
 
 Now to add the permissions to the API Token
 
