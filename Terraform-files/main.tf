@@ -18,7 +18,7 @@ provider "proxmox" {
 # Local variables
 
 locals {
-  starting_vmid = 300
+  starting_vmid = 400
 }
 
 # Create VMs
@@ -37,10 +37,11 @@ resource "proxmox_vm_qemu" "kubernetes_master" {
   full_clone = true
   scsihw     = "virtio-scsi-single"
   os_type    = "cloud-init"
+  boot       = "order=scsi0"
 
   ciuser     = "root"
   sshkeys    = file(var.ssh_pub_key)
-  ipconfig0  = "ip=192.168.0.17${count.index},gw=192.168.0.1"
+  ipconfig0  = "ip=192.168.0.17${count.index}/24,gw=192.168.0.1"
   nameserver = "8.8.8.8"
   ciupgrade  = true
   skip_ipv6  = true
