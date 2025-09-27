@@ -83,4 +83,23 @@ resource "proxmox_vm_qemu" "kubernetes_master" {
       }
     }
   }
+
+  connection {
+    type        = "ssh"
+    host        = "192.168.0.17${count.index}"
+    user        = "root"
+    private_key = file(var.ssh_private_key)
+  }
+
+  provisioner "remote-exec" {
+    inline = [
+      "apt update -y",
+      "apt upgrade -y",
+      "apt install -y qemu-guest-agent",
+      "systemctl enable qemu-guest-agent",
+      "systemctl start qemu-guest-agent",
+      "apt update -y",
+      "apt install -y python3 python3-pip"
+    ]
+  }
 }
