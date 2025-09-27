@@ -9,7 +9,7 @@ In this step of the project I will need to create a user account and API Token f
 1. Create a user account in Proxmox for Terraform to use.
 2. Create an API Token with the specific permissions to connect to Proxmox.
 3. Create a custom role in Proxmox for the API Token.
-4. Assign the role to the API Token.
+4. Assign the role to the Terraform user.
 
 ---
 
@@ -95,14 +95,14 @@ Create
 
 ---
 
-## Step 4 - Assign the role to the API Token
+## Step 4 - Assign the role to the Terraform user
 
-Now to add the permissions to the API Token
+Now to add the permissions to the Terraform user
 
 ```
-Datacenter > Permissions > Add > API Token Permission
+Datacenter > Permissions > Add > User Permission
 - Path: "/"
-- API Token: "terraform@pve!terraform"
+- User: "terraform@pve"
 - Role: "TerraformDeployment"
 - Propogate: Enabled
 

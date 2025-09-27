@@ -65,6 +65,11 @@ variable "pm_api_token_secret" {
   type        = string
   sensitive   = true
 }
+variable "ssh_pub_key" {
+  description = "SSH pub key location"
+  type        = string
+  sensitive   = true
+}
 
 ```
 
