@@ -29,7 +29,7 @@ resource "proxmox_vm_qemu" "kubernetes_master" {
 
   name        = "KubernetesMaster${count.index + 1}"
   vmid        = local.starting_vmid + count.index
-  clone       = "Ubuntu-Cloud"
+  clone       = "ubuntu-cloud"
   agent       = 1
   description = "Kubernetes Master node deployed using Terraform."
 
