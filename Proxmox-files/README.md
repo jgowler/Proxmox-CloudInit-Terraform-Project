@@ -4,7 +4,7 @@
 
 ## Introduction
 
-In this step of the projject I will need to create a user account and API Token for Terraform to use to deploy the VM's to my homelab.
+In this step of the project I will need to create a user account and API Token for Terraform to use to deploy the VM's to my homelab.
 
 1. Create a user account in Proxmox for Terraform to use.
 2. Create an API Token with the specific permissions to connect to Proxmox.
