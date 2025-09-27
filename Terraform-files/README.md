@@ -205,7 +205,7 @@ serial {
 
   This part has been added for post-deployment configuration. I intend to use Ansible playbooks to manage these machines so Python is necessary. 
 
-  ## Step 4b - Configuring the  Worker VM(s)
+  ## Step 4c - Configuring the  Worker VM(s)
 
   It is more likely that there will be multiple Worker VMs created during this step so I wanted these machines to follow the same process of creation as the Master node(s) but assign their IP addresses in sequence after the Master nodes, e.g. master node 192.168.0.170, worker 1 192.168.0.171, worker 2 192.168.0.172, etc. This is intended to assign lower IP addresses to the one or many Master nodes before the Worker nodes.
 
