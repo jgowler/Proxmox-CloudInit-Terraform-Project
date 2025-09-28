@@ -66,12 +66,13 @@ resource "proxmox_lxc" "ansible" {
 
   provisioner "remote-exec" {
     inline = [
-      "apt update -y && apt upgrade -y",
-      "apt install -y qemu-guest-agent openssh-server python3 python3-pip software-properties-common",
-      "systemctl start --now qemu-guest-agent",
-      "systemctl enable --now ssh",
-      "add-apt-repository --yes --update ppa:ansible/ansible",
-      "apt update -y && apt install -y ansible"
+      "set -eux",
+      "apt update -y",
+      "apt upgrade -y",
+      "apt install -y openssh-server qemu-guest-agent python3 python3-pip",
+      "sleep 20",
+      "systemctl start qemu-guest-agent",
+      "systemctl enable --now ssh"
     ]
 
   }

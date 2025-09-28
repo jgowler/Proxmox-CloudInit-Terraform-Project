@@ -101,8 +101,10 @@ resource "proxmox_vm_qemu" "kubernetes_master" {
       "set -eux",
       "apt update -y",
       "apt upgrade -y",
-      "apt install -y qemu-guest-agent python3 python3-pip",
-      "systemctl start qemu-guest-agent"
+      "apt install -y openssh-server qemu-guest-agent python3 python3-pip",
+      "sleep 20",
+      "systemctl start qemu-guest-agent",
+      "systemctl enable --now ssh"
     ]
   }
 }
@@ -185,6 +187,7 @@ resource "proxmox_vm_qemu" "kubernetes_worker" {
       "apt update -y",
       "apt upgrade -y",
       "apt install -y qemu-guest-agent python3 python3-pip",
+      "sleep 20",
       "systemctl start qemu-guest-agent"
     ]
   }
