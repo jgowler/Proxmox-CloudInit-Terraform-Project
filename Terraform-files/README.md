@@ -116,7 +116,7 @@ There are a few things that need to be set up when creating the Master VM from s
 
 ```
 resource "proxmox_vm_qemu" "kubernetes_master" {
-  count       = 1
+  count       = var.master_count
   target_node = "homelab"
 
   name        = "KubernetesMaster${count.index + 1}"
@@ -133,9 +133,8 @@ resource "proxmox_vm_qemu" "kubernetes_master" {
 
   ciuser     = "root"
   sshkeys    = file(var.ssh_pub_key)
-  ipconfig0  = "ip=192.168.0.17${count.index}/24,gw=192.168.0.1"
+  ipconfig0  = "ip=${local.ip_prefix}.${local.base_ip_last + count.index}/24,gw=${var.gateway_address}"
   nameserver = "8.8.8.8"
-  ciupgrade  = true
   skip_ipv6  = true
 ```
 
@@ -185,28 +184,54 @@ serial {
   ```
   connection {
     type        = "ssh"
-    host        = "192.168.0.17${count.index}"
+    host        = "${local.ip_prefix}.${local.base_ip_last + count.index}"
     user        = "root"
     private_key = file(var.ssh_private_key)
   }
 
   provisioner "remote-exec" {
     inline = [
+      "sleep 20",
       "apt update -y",
       "apt upgrade -y",
-      "apt install -y qemu-guest-agent",
-      "systemctl enable qemu-guest-agent",
-      "systemctl start qemu-guest-agent",
-      "apt update -y",
-      "apt install -y python3 python3-pip"
+      "apt install -y qemu-guest-agent python3 python3-pip",
+      "systemctl start qemu-guest-agent"
     ]
   }
   ```
 
-  This part has been added for post-deployment configuration. I intend to use Ansible playbooks to manage these machines so Python is necessary. 
+This part has been added for post-deployment configuration. I intend to use Ansible playbooks to manage these machines so Python is necessary. 
 
-  ## Step 4c - Configuring the  Worker VM(s)
+## Step 4c - Configuring the  Worker VM(s)
 
-  It is more likely that there will be multiple Worker VMs created during this step so I wanted these machines to follow the same process of creation as the Master node(s) but assign their IP addresses in sequence after the Master nodes, e.g. master node 192.168.0.170, worker 1 192.168.0.171, worker 2 192.168.0.172, etc. This is intended to assign lower IP addresses to the one or many Master nodes before the Worker nodes.
+It is more likely that there will be multiple Worker VMs created during this step so I wanted these machines to follow the same process of creation as the Master node(s) but assign their IP addresses in sequence after the Master nodes, e.g. master node 192.168.0.170, worker 1 192.168.0.171, worker 2 192.168.0.172, etc. This is intended to assign lower IP addresses to the one or many Master nodes before the Worker nodes.
+
+```
+resource "proxmox_vm_qemu" "kubernetes_worker" {
+  count       = var.worker_count
+  target_node = "homelab"
+
+  name        = "KubernetesWorker${count.index + 1}"
+  vmid        = local.starting_vmid + var.master_count + count.index
+  clone       = "ubuntu-cloud"
+  agent       = 1
+  description = "Kubernetes Worker node deployed using Terraform."
+
+  memory     = 4096
+  full_clone = true
+  scsihw     = "virtio-scsi-single"
+  os_type    = "cloud-init"
+  boot       = "order=scsi0"
+
+  ciuser     = "root"
+  sshkeys    = file(var.ssh_pub_key)
+  ipconfig0  = "ip=${local.ip_prefix}.${local.base_ip_last + var.master_count + count.index}/24,gw=${var.gateway_address}"
+  nameserver = "8.8.8.8"
+  ciupgrade  = true
+  skip_ipv6  = true
+}
+```
+
+Here, the `ipconfig0` is configured to use local variables to allocate the worker nodes IP addresses after the master node(s) in sequence. This way, master nodes have lower IP addresses but are followed immediately by the worker nodes.
 
 

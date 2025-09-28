@@ -19,12 +19,15 @@ provider "proxmox" {
 
 locals {
   starting_vmid = 400
+  base_ip_parts = split(".", var.base_ip)
+  base_ip_last  = tonumber(local.base_ip_parts[3])
+  ip_prefix     = "${local.base_ip_parts[0]}.${local.base_ip_parts[1]}.${local.base_ip_parts[2]}"
 }
 
 # Create VMs
 
 resource "proxmox_vm_qemu" "kubernetes_master" {
-  count       = 1
+  count       = var.master_count
   target_node = "homelab"
 
   name        = "KubernetesMaster${count.index + 1}"
@@ -41,7 +44,88 @@ resource "proxmox_vm_qemu" "kubernetes_master" {
 
   ciuser     = "root"
   sshkeys    = file(var.ssh_pub_key)
-  ipconfig0  = "ip=192.168.0.17${count.index}/24,gw=192.168.0.1"
+  ipconfig0  = "ip=${local.ip_prefix}.${local.base_ip_last + count.index}/24,gw=${var.gateway_address}"
+  nameserver = "8.8.8.8"
+  skip_ipv6  = true
+
+
+  serial {
+    id   = 0
+    type = "socket"
+  }
+
+  cpu {
+    cores   = 2
+    sockets = 1
+  }
+
+  network {
+    id     = 0
+    model  = "virtio"
+    bridge = "vmbr0"
+  }
+
+  disks {
+    scsi {
+      scsi0 {
+        disk {
+          size       = "32G"
+          storage    = "local-lvm"
+          replicate  = true
+          discard    = true
+          emulatessd = true
+        }
+      }
+    }
+    ide {
+      ide2 {
+        cloudinit {
+          storage = "local-lvm"
+        }
+      }
+    }
+  }
+
+  connection {
+    type        = "ssh"
+    host        = "${local.ip_prefix}.${local.base_ip_last + count.index}"
+    user        = "root"
+    private_key = file(var.ssh_private_key)
+  }
+
+  provisioner "remote-exec" {
+    inline = [
+      "sleep 20",
+      "apt update -y",
+      "apt upgrade -y",
+      "apt install -y qemu-guest-agent python3 python3-pip",
+      "systemctl start qemu-guest-agent"
+    ]
+  }
+}
+
+
+# Worker node config
+
+resource "proxmox_vm_qemu" "kubernetes_worker" {
+  count       = var.worker_count
+  target_node = "homelab"
+
+  name        = "KubernetesWorker${count.index + 1}"
+  vmid        = local.starting_vmid + var.master_count + count.index
+  clone       = "ubuntu-cloud"
+  agent       = 1
+  description = "Kubernetes Worker node deployed using Terraform."
+
+  memory     = 4096
+  full_clone = true
+  scsihw     = "virtio-scsi-single"
+  os_type    = "cloud-init"
+  boot       = "order=scsi0"
+
+  ciuser     = "root"
+  sshkeys    = file(var.ssh_pub_key)
+  ipconfig0  = "ip=${local.ip_prefix}.${local.base_ip_last + var.master_count + count.index}/24,gw=${var.gateway_address}"
   nameserver = "8.8.8.8"
   ciupgrade  = true
   skip_ipv6  = true
@@ -76,7 +160,7 @@ resource "proxmox_vm_qemu" "kubernetes_master" {
       }
     }
     ide {
-      ide0 {
+      ide2 {
         cloudinit {
           storage = "local-lvm"
         }
@@ -86,20 +170,18 @@ resource "proxmox_vm_qemu" "kubernetes_master" {
 
   connection {
     type        = "ssh"
-    host        = "192.168.0.17${count.index}"
+    host        = "${local.ip_prefix}.${local.base_ip_last + var.master_count + count.index}"
     user        = "root"
     private_key = file(var.ssh_private_key)
   }
 
   provisioner "remote-exec" {
     inline = [
+      "sleep 20",
       "apt update -y",
       "apt upgrade -y",
-      "apt install -y qemu-guest-agent",
-      "systemctl enable qemu-guest-agent",
-      "systemctl start qemu-guest-agent",
-      "apt update -y",
-      "apt install -y python3 python3-pip"
+      "apt install -y qemu-guest-agent python3 python3-pip",
+      "systemctl start qemu-guest-agent"
     ]
   }
 }

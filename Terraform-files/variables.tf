@@ -26,3 +26,23 @@ variable "ssh_private_key" {
   type        = string
   sensitive   = true
 }
+variable "master_count" {
+  description = "The number of Master nodes to deploy"
+  type        = number
+  default     = 1
+}
+variable "worker_count" {
+  description = "The number of Worker nodes to deploy"
+  type        = number
+  default     = 2
+}
+variable "base_ip" {
+  description = "Base IP address to use to deploy VMs"
+  type        = string
+  default     = "192.168.0.170"
+}
+variable "gateway_address" {
+  description = "Network gateway address"
+  type        = string
+  default     = "192.168.0.1"
+}
