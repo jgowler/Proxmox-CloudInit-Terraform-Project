@@ -198,6 +198,7 @@ resource "proxmox_lxc" "ansible" {
   cores        = 1
   memory       = 2048
   nameserver   = "8.8.8.8"
+  start        = true
 
   rootfs {
     storage = "local-lvm"
@@ -222,7 +223,7 @@ resource "proxmox_lxc" "ansible" {
     host        = local.ansible_ip
     user        = "root"
     private_key = file(var.ssh_private_key)
-    timeout     = "5m"
+    timeout     = "10m"
   }
 
   provisioner "remote-exec" {
@@ -230,8 +231,7 @@ resource "proxmox_lxc" "ansible" {
       "apt update -y && apt upgrade -y",
       "apt install -y qemu-guest-agent openssh-server python3 python3-pip software-properties-common",
       "systemctl start --now qemu-guest-agent",
-      "systemctl enable ssh",
-      "systemctl start ssh",
+      "systemctl enable --now ssh",
       "add-apt-repository --yes --update ppa:ansible/ansible",
       "apt update -y && apt install -y ansible"
     ]
@@ -246,7 +246,7 @@ resource "null_resource" "copy_ansible_private_key" {
   ]
 
   provisioner "file" {
-    source      = var.ansible_private_key
+    source      = file(var.ansible_private_key)
     destination = "/root/.ssh/ansible_key"
 
     connection {
