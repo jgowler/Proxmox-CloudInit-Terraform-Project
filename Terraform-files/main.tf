@@ -23,7 +23,7 @@ locals {
   base_ip_last      = tonumber(local.base_ip_parts[3])
   ip_prefix         = "${local.base_ip_parts[0]}.${local.base_ip_parts[1]}.${local.base_ip_parts[2]}"
   ansible_ip        = "${local.ip_prefix}.${local.base_ip_last + var.master_count + var.worker_count + 1}"
-  combined_ssh_keys = "${file(var.ssh_pub_key)}\n${file(var.ansible_public_key)}"
+  combined_ssh_keys = join("\n", [file(var.ssh_pub_key), file(var.ansible_public_key)])
 }
 
 # Create VMs

@@ -87,7 +87,7 @@ This is then followed by the transfer of the SSH private key to the LXC of which
 ```
 locals {
     ...
-    combined_ssh_keys = "${file(var.ssh_pub_key)}\n${file(var.ansible_public_key)}"
+    combined_ssh_keys = join("\n", [file(var.ssh_pub_key), file(var.ansible_public_key)])
 }
 
 resource "proxmox_vm_qemu" "kubernetes_master" {
