@@ -253,7 +253,7 @@ resource "null_resource" "copy_ansible_private_key" {
       type        = "ssh"
       host        = "${local.ip_prefix}.${local.base_ip_last + var.master_count + var.worker_count + 1}"
       user        = "root"
-      private_key = var.ssh_private_key
+      private_key = file(var.ssh_private_key)
     }
   }
   provisioner "remote-exec" {
