@@ -15,8 +15,8 @@ I will be structuring the project in this order:
 1. Create a Cloud-init image of Ubuntu server using a Cloud image.
 2. Create a user account in Proxmox for Terraform to use.
 3. Create an API Token with the specific permissions to connect to Proxmox.
-4. Write the Terraform deployment script to create the VM's, deploy Kubernetes on the nodes, and install Python.
-5. Create an Ansible playbook to run updates on the nodes over SSH.
+4. Write the Terraform deployment script to create the VM's and install Python.
+5. Create an Ansible playbook to install Kubernetes on the new VMs.
 
 ---
 

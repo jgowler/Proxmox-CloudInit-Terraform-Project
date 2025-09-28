@@ -200,7 +200,7 @@ serial {
   }
   ```
 
-This part has been added for post-deployment configuration. I intend to use Ansible playbooks to manage these machines so Python is necessary. 
+This part has been added for post-deployment configuration. I intend to use Ansible playbooks to manage these machines so Python is necessary. `sleep 20` has been added to the `remote-exec` provisioner to allow the network time to come online before attempting to run the other commands.
 
 ## Step 4c - Configuring the  Worker VM(s)
 
@@ -234,4 +234,34 @@ resource "proxmox_vm_qemu" "kubernetes_worker" {
 
 Here, the `ipconfig0` is configured to use local variables to allocate the worker nodes IP addresses after the master node(s) in sequence. This way, master nodes have lower IP addresses but are followed immediately by the worker nodes.
 
+To view the complete deployement script see the accompanying files. the `secrets.tfvars` file will not be included so you will need to create one based off the values found in `variables.tf`.
 
+---
+
+## Step 5 - Initialise Terraform with the required provider for Proxmox.
+
+With the deployment script ready all that is left now is to initialise Terraform in the directory containing the files. CD to the directory and run `terraform init` to begin. This will download the required providers from `main.tf`, downloads modules (if required), and configures the backend (optional).
+
+There will be confirmation on-screen after this is completed, after which you will then be able to run the following commands:
+
+```
+"terraform format ." will automatically format config files in the PWD.
+"terraform validate" will check the syntax of the config files.
+"terraform plan" will show you what Terraform will do
+"terraform apply" will show you what it will do with the option to agree and continue
+"terraform destroy" will destroy all infrastructre managed by Terraform
+```
+
+In my configuration I used `secrets.tfvars` to provide the sensitive information to the `main.tf` file via `variables.tf`. To use these values i needed to specify -var-file="secrets.tfvars" whenever I ran plan or apply. As I knew this would be used for every command in this project I elected to rename the file to `secrets.auto.tfvars` to remove the need to specify it.
+
+---
+
+## Step 6 - Run the deployment to create the VMs
+
+Now to run the script and deploy the machines. `terraform validate` confirmed that the config was syntactically correct, so I ran `terraform plan` to check that Terraform will only be creating resources, not modifying or destroying.
+
+`terraform apply` prepped the deployment, with a simple "yes" in response to the question Terraform began to do the work. The terminal displayed the information about what was happening, including the follow up commands ran to update and upgrade.
+
+---
+
+With the machines provisionaed and ready to go the next part of this project is to deploy Kubernetes to the machines using Ansible.
