@@ -18,10 +18,12 @@ provider "proxmox" {
 # Local variables
 
 locals {
-  starting_vmid = 400
-  base_ip_parts = split(".", var.base_ip)
-  base_ip_last  = tonumber(local.base_ip_parts[3])
-  ip_prefix     = "${local.base_ip_parts[0]}.${local.base_ip_parts[1]}.${local.base_ip_parts[2]}"
+  starting_vmid     = 400
+  base_ip_parts     = split(".", var.base_ip)
+  base_ip_last      = tonumber(local.base_ip_parts[3])
+  ip_prefix         = "${local.base_ip_parts[0]}.${local.base_ip_parts[1]}.${local.base_ip_parts[2]}"
+  ansible_ip        = "${local.ip_prefix}.${local.base_ip_last + var.master_count + var.worker_count + 1}"
+  combined_ssh_keys = "${file(var.ssh_pub_key)}\n${file(var.ansible_public_key)}"
 }
 
 # Create VMs
@@ -43,7 +45,7 @@ resource "proxmox_vm_qemu" "kubernetes_master" {
   boot       = "order=scsi0"
 
   ciuser     = "root"
-  sshkeys    = file(var.ssh_pub_key)
+  sshkeys    = local.combined_ssh_keys
   ipconfig0  = "ip=${local.ip_prefix}.${local.base_ip_last + count.index}/24,gw=${var.gateway_address}"
   nameserver = "8.8.8.8"
   skip_ipv6  = true
@@ -91,6 +93,7 @@ resource "proxmox_vm_qemu" "kubernetes_master" {
     host        = "${local.ip_prefix}.${local.base_ip_last + count.index}"
     user        = "root"
     private_key = file(var.ssh_private_key)
+    timeout     = "5m"
   }
 
   provisioner "remote-exec" {
@@ -124,7 +127,7 @@ resource "proxmox_vm_qemu" "kubernetes_worker" {
   boot       = "order=scsi0"
 
   ciuser     = "root"
-  sshkeys    = file(var.ssh_pub_key)
+  sshkeys    = local.combined_ssh_keys
   ipconfig0  = "ip=${local.ip_prefix}.${local.base_ip_last + var.master_count + count.index}/24,gw=${var.gateway_address}"
   nameserver = "8.8.8.8"
   ciupgrade  = true
@@ -173,15 +176,96 @@ resource "proxmox_vm_qemu" "kubernetes_worker" {
     host        = "${local.ip_prefix}.${local.base_ip_last + var.master_count + count.index}"
     user        = "root"
     private_key = file(var.ssh_private_key)
+    timeout     = "5m"
   }
 
   provisioner "remote-exec" {
     inline = [
-      "sleep 20",
       "apt update -y",
       "apt upgrade -y",
       "apt install -y qemu-guest-agent python3 python3-pip",
       "systemctl start qemu-guest-agent"
     ]
+  }
+}
+
+resource "proxmox_lxc" "ansible" {
+  target_node  = "homelab"
+  hostname     = "Ansible"
+  vmid         = local.starting_vmid + var.master_count + var.worker_count + 1
+  ostemplate   = "local:vztmpl/ubuntu-24.04-standard_24.04-2_amd64.tar.zst"
+  unprivileged = true
+  cores        = 1
+  memory       = 2048
+  nameserver   = "8.8.8.8"
+
+  rootfs {
+    storage = "local-lvm"
+    size    = "8G"
+  }
+
+  cmode = "tty"
+  tty   = 2
+
+  network {
+    name   = "eth0"
+    bridge = "vmbr0"
+    ip     = "${local.ip_prefix}.${local.base_ip_last + var.master_count + var.worker_count + 1}/24"
+    gw     = var.gateway_address
+  }
+
+
+  ssh_public_keys = file(var.ssh_pub_key)
+
+  connection {
+    type        = "ssh"
+    host        = local.ansible_ip
+    user        = "root"
+    private_key = file(var.ssh_private_key)
+    timeout     = "5m"
+  }
+
+  provisioner "remote-exec" {
+    inline = [
+      "apt update -y && apt upgrade -y",
+      "apt install -y qemu-guest-agent openssh-server python3 python3-pip software-properties-common",
+      "systemctl start --now qemu-guest-agent",
+      "systemctl enable ssh",
+      "systemctl start ssh",
+      "add-apt-repository --yes --update ppa:ansible/ansible",
+      "apt update -y && apt install -y ansible"
+    ]
+
+  }
+}
+
+resource "null_resource" "copy_ansible_private_key" {
+
+  depends_on = [
+    proxmox_lxc.ansible
+  ]
+
+  provisioner "file" {
+    source      = var.ansible_private_key
+    destination = "/root/.ssh/ansible_key"
+
+    connection {
+      type        = "ssh"
+      host        = "${local.ip_prefix}.${local.base_ip_last + var.master_count + var.worker_count + 1}"
+      user        = "root"
+      private_key = var.ssh_private_key
+    }
+  }
+  provisioner "remote-exec" {
+    inline = [
+      "chmod 600 /root/.ssh/ansible_key",
+      "chown root:root /root/.ssh/ansible_key"
+    ]
+    connection {
+      type        = "ssh"
+      host        = "${local.ip_prefix}.${local.base_ip_last + var.master_count + var.worker_count + 1}"
+      user        = "root"
+      private_key = var.ssh_private_key
+    }
   }
 }

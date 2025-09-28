@@ -46,3 +46,13 @@ variable "gateway_address" {
   type        = string
   default     = "192.168.0.1"
 }
+variable "ansible_private_key" {
+  description = "SSH private key for Ansible to connect to VMs"
+  type        = string
+  sensitive   = true
+}
+variable "ansible_public_key" {
+  description = "SSH public key for Ansible"
+  type        = string
+  sensitive   = true
+}
