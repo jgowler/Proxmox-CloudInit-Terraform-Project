@@ -264,4 +264,4 @@ Now to run the script and deploy the machines. `terraform validate` confirmed th
 
 ---
 
-With the machines provisionaed and ready to go the next part of this project is to deploy Kubernetes to the machines using Ansible.
+With the machines provisionaed and ready to go the next part of this project is to [deploy Kubernetes to the machines using Ansible.](https://github.com/jgowler/Proxmox-CloudInit-Terraform-Project/tree/main/Ansible-files)

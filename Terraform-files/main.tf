@@ -246,7 +246,7 @@ resource "null_resource" "copy_ansible_private_key" {
   ]
 
   provisioner "file" {
-    source      = file(var.ansible_private_key)
+    source      = var.ansible_private_key
     destination = "/root/.ssh/ansible_key"
 
     connection {
