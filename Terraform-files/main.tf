@@ -98,7 +98,7 @@ resource "proxmox_vm_qemu" "kubernetes_master" {
 
   provisioner "remote-exec" {
     inline = [
-      "sleep 20",
+      "set -eux",
       "apt update -y",
       "apt upgrade -y",
       "apt install -y qemu-guest-agent python3 python3-pip",
@@ -181,6 +181,7 @@ resource "proxmox_vm_qemu" "kubernetes_worker" {
 
   provisioner "remote-exec" {
     inline = [
+      "set -eux",
       "apt update -y",
       "apt upgrade -y",
       "apt install -y qemu-guest-agent python3 python3-pip",
