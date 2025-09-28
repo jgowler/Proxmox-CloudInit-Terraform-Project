@@ -99,12 +99,12 @@ resource "proxmox_vm_qemu" "kubernetes_master" {
   provisioner "remote-exec" {
     inline = [
       "set -eux",
-      "apt update -y",
-      "apt upgrade -y",
-      "apt install -y openssh-server qemu-guest-agent python3 python3-pip",
-      "sleep 20",
-      "systemctl start qemu-guest-agent",
-      "systemctl enable --now ssh"
+      "export DEBIAN_FRONTEND=noninteractive",
+      "apt-get update -y",
+      "apt-get upgrade -y -o Dpkg::Options::='--force-confold'",
+      "apt-get install -y qemu-guest-agent python3 python3-pip",
+      "sleep 10",
+      "systemctl enable --now qemu-guest-agent"
     ]
   }
 }
@@ -184,11 +184,12 @@ resource "proxmox_vm_qemu" "kubernetes_worker" {
   provisioner "remote-exec" {
     inline = [
       "set -eux",
-      "apt update -y",
-      "apt upgrade -y",
-      "apt install -y qemu-guest-agent python3 python3-pip",
-      "sleep 20",
-      "systemctl start qemu-guest-agent"
+      "export DEBIAN_FRONTEND=noninteractive",
+      "apt-get update -y",
+      "apt-get upgrade -y -o Dpkg::Options::='--force-confold'",
+      "apt-get install -y qemu-guest-agent python3 python3-pip",
+      "sleep 10",
+      "systemctl enable --now qemu-guest-agent"
     ]
   }
 }
