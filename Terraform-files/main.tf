@@ -185,13 +185,18 @@ resource "proxmox_vm_qemu" "kubernetes_worker" {
     inline = [
       "set -eux",
       "export DEBIAN_FRONTEND=noninteractive",
+      "while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do sleep 1; done",
+      "apt-get install -f -y || true",
       "apt-get update -y",
-      "apt-get upgrade -y -o Dpkg::Options::='--force-confold'",
-      "apt-get install -y qemu-guest-agent python3 python3-pip",
-      "sleep 10",
-      "systemctl enable --now qemu-guest-agent"
+      "apt-get -o Dpkg::Options::='--force-confold' upgrade -y || apt-get install -f -y",
+      "apt-get install -y -o Dpkg::Options::='--force-confold' qemu-guest-agent python3 python3-pip || apt-get install -f -y",
+      "systemctl enable --now qemu-guest-agent || true"
     ]
   }
+
+
+
+
 }
 
 resource "proxmox_lxc" "ansible" {
@@ -223,6 +228,8 @@ resource "proxmox_lxc" "ansible" {
 
   ssh_public_keys = file(var.ssh_pub_key)
 
+  ##
+
   connection {
     type        = "ssh"
     host        = local.ansible_ip
@@ -233,15 +240,40 @@ resource "proxmox_lxc" "ansible" {
 
   provisioner "remote-exec" {
     inline = [
-      "apt update -y && apt upgrade -y",
-      "apt install -y qemu-guest-agent openssh-server python3 python3-pip software-properties-common",
-      "systemctl start --now qemu-guest-agent",
-      "systemctl enable --now ssh",
-      "add-apt-repository --yes --update ppa:ansible/ansible",
-      "apt update -y && apt install -y ansible"
+      "set -eux",
+      "export DEBIAN_FRONTEND=noninteractive",
+      "apt-get update -y",
+      "apt-get -o Dpkg::Options::='--force-confold' upgrade -y || apt-get -f install -y",
+      "apt-get install -y qemu-guest-agent openssh-server python3 python3-pip software-properties-common || apt-get install -f -y",
+      "dpkg-reconfigure openssh-server || true",
+      "mkdir -p /run/sshd",
+      "/usr/sbin/sshd || true",
+      "systemctl start qemu-guest-agent || true",
+      "add-apt-repository --yes --update ppa:ansible/ansible || true",
+      "apt-get update -y",
+      "apt-get install -y ansible || apt-get install -f -y",
+      "sed -i '/^#\\?PasswordAuthentication /d;/^#\\?PermitRootLogin /d;/^#\\?PubkeyAuthentication /d' /etc/ssh/sshd_config",
+      "printf 'PasswordAuthentication no\\nPermitRootLogin prohibit-password\\nPubkeyAuthentication yes\\n' > /etc/ssh/sshd_config",
+      "systemctl restart ssh || /usr/sbin/sshd || true"
     ]
-
   }
+
+  ##
+
+  provisioner "remote-exec" {
+    inline = [
+      "echo 'Waiting for SSH to become available...'",
+      "until nc -zv localhost 22; do sleep; done"
+    ]
+    connection {
+      type        = "ssh"
+      host        = local.ansible_ip
+      user        = "root"
+      private_key = file(var.ssh_private_key)
+      timeout     = "5m"
+    }
+  }
+
 }
 
 resource "null_resource" "copy_ansible_private_key" {
@@ -256,21 +288,42 @@ resource "null_resource" "copy_ansible_private_key" {
 
     connection {
       type        = "ssh"
-      host        = "${local.ip_prefix}.${local.base_ip_last + var.master_count + var.worker_count + 1}"
+      host        = local.ansible_ip
       user        = "root"
       private_key = file(var.ssh_private_key)
     }
   }
+}
+
+resource "null_resource" "fix_ssh" {
+  depends_on = [
+    proxmox_lxc.ansible
+  ]
+
+  provisioner "file" {
+    source      = "ansible_ssh_fix.sh"
+    destination = "/tmp/ansible_ssh_fix.sh"
+
+    connection {
+      type        = "ssh"
+      host        = local.ansible_ip
+      user        = "root"
+      private_key = file(var.ssh_private_key)
+      timeout     = "5m"
+    }
+  }
+
   provisioner "remote-exec" {
     inline = [
-      "chmod 600 /root/.ssh/ansible_key",
-      "chown root:root /root/.ssh/ansible_key"
+      "chmod +x /tmp/ansible_ssh_fix.sh",
+      "bash /tmp/ansible_ssh_fix.sh \"$(echo ${file(var.ssh_pub_key)} | tr -d '\\n')\""
     ]
     connection {
       type        = "ssh"
-      host        = "${local.ip_prefix}.${local.base_ip_last + var.master_count + var.worker_count + 1}"
+      host        = local.ansible_ip
       user        = "root"
       private_key = file(var.ssh_private_key)
+      timeout     = "5m"
     }
   }
 }
