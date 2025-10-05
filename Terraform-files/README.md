@@ -131,7 +131,8 @@ resource "proxmox_vm_qemu" "kubernetes_master" {
   os_type    = "cloud-init"
   boot       = "order=scsi0"
 
-  ciuser     = "root"
+  ciuser     = "KM${count.index + 1}"
+  cipassword = var.vm_password
   sshkeys    = file(var.ssh_pub_key)
   ipconfig0  = "ip=${local.ip_prefix}.${local.base_ip_last + count.index}/24,gw=${var.gateway_address}"
   nameserver = "8.8.8.8"
@@ -182,25 +183,36 @@ serial {
   In this section the serrial port, cpu, network, and disks are configured.
 
   ```
-  connection {
-    type        = "ssh"
-    host        = "${local.ip_prefix}.${local.base_ip_last + count.index}"
-    user        = "root"
-    private_key = file(var.ssh_private_key)
+  provisioner "file" {
+    source      = "./scripts/vm_setup.sh"
+    destination = "/tmp/vm_setup.sh"
+
+    connection {
+      type        = "ssh"
+      host        = "${local.ip_prefix}.${local.base_ip_last + count.index}"
+      user        = "root"
+      private_key = file(var.ssh_private_key)
+      timeout     = "5m"
+    }
   }
 
   provisioner "remote-exec" {
     inline = [
-      "sleep 20",
-      "apt update -y",
-      "apt upgrade -y",
-      "apt install -y qemu-guest-agent python3 python3-pip",
-      "systemctl start qemu-guest-agent"
+      "cloud-init status --wait || true",
+      "chmod +x /tmp/vm_setup.sh",
+      "/tmp/vm_setup.sh"
     ]
+    connection {
+      type        = "ssh"
+      host        = "${local.ip_prefix}.${local.base_ip_last + count.index}"
+      user        = "root"
+      private_key = file(var.ssh_private_key)
+      timeout     = "5m"
+    }
   }
   ```
 
-This part has been added for post-deployment configuration. I intend to use Ansible playbooks to manage these machines so Python is necessary. `sleep 20` has been added to the `remote-exec` provisioner to allow the network time to come online before attempting to run the other commands.
+This part is to copy over a post-deployment script from my local machine to each of the VMs created to install the necessary packages for Ansible to run playbooks on this machine. The "remote-exec" provisioner will make the script executable and run it.
 
 ## Step 4c - Configuring the  Worker VM(s)
 
@@ -223,16 +235,16 @@ resource "proxmox_vm_qemu" "kubernetes_worker" {
   os_type    = "cloud-init"
   boot       = "order=scsi0"
 
-  ciuser     = "root"
+  ciuser     = "KW${count.index + 1}"
+  cipassword = var.vm_password
   sshkeys    = file(var.ssh_pub_key)
   ipconfig0  = "ip=${local.ip_prefix}.${local.base_ip_last + var.master_count + count.index}/24,gw=${var.gateway_address}"
   nameserver = "8.8.8.8"
   ciupgrade  = true
   skip_ipv6  = true
-}
 ```
 
-Here, the `ipconfig0` is configured to use local variables to allocate the worker nodes IP addresses after the master node(s) in sequence. This way, master nodes have lower IP addresses but are followed immediately by the worker nodes.
+Here, the `ipconfig0` is configured to use local variables to allocate the worker nodes IP addresses after the master node(s) in sequence. This way, master nodes have lower IP addresses but are followed immediately by the worker nodes. These nodes will also run the same file and remote-exec provisioners to copy the post-deployment script over to the new machines and run them, allowing Ansible to run playbooks on it.
 
 To view the complete deployement script see the accompanying files. the `secrets.tfvars` file will not be included so you will need to create one based off the values found in `variables.tf`.
 

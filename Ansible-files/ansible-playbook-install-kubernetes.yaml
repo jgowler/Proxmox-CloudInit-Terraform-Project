@@ -1,0 +1,8 @@
+- name: Apply common tasks to all nodes
+  import_playbook: kubernetes_common.yaml
+
+- name: Setup Kubernetes masters
+  import_playbook: kubernetes_master.yaml
+
+- name: Setup Kubernetes workers
+  import_playbook: kubernetes_worker.yaml

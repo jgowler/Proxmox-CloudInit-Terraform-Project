@@ -1,0 +1,11 @@
+- name: Join worker nodes to the cluster
+  hosts: workers
+  become: yes
+  gather_facts: yes
+  tasks:
+
+    - name: Join the worker node to the Kubernetes cluster
+      command: >
+        {{ hostvars[groups['masters'][0]].kubeadm_join_command }}
+        --cri-socket=unix:///run/containerd/containerd.sock
+      ignore_errors: yes

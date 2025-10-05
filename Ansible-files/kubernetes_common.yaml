@@ -1,0 +1,114 @@
+---
+- name: Setup Kubernetes node (Master or Worker)
+  hosts: all
+  become: yes
+  gather_facts: yes
+
+  vars:
+    kube_version: "1.33.4-1.1"
+    containerd_config_path: "/etc/containerd/config.toml"
+    kubernetes_keyring: "/etc/apt/keyrings/kubernetes-apt-keyring.gpg"
+
+  tasks:
+
+    # CONTAINERD #
+    - name: Update apt package index
+      apt:
+        update_cache: yes
+
+    - name: Install containerd
+      apt:
+        name: containerd
+        state: present
+
+    - name: Ensure containerd configuration directory exists
+      file:
+        path: /etc/containerd
+        state: directory
+
+    - name: Generate containerd default config with custom settings
+      command: >
+        containerd config default
+      register: containerd_default_config
+
+    - name: Write customized containerd config
+      copy:
+        content: "{{ containerd_default_config.stdout
+                     | regex_replace('SystemdCgroup = false', 'SystemdCgroup = true')
+                     | regex_replace('sandbox_image = \".*\"', 'sandbox_image = \"registry.k8s.io/pause:3.10\"') }}"
+        dest: "{{ containerd_config_path }}"
+        mode: '0644'
+
+    - name: Restart containerd
+      systemd:
+        name: containerd
+        state: restarted
+        enabled: yes
+
+    - name: Disable swap
+      command: swapoff -a
+      ignore_errors: yes
+
+    # KUBEADM, KUBELET, KUBECTL #
+    - name: Install prerequisite packages for Kubernetes repo
+      apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - gpg
+        state: present
+
+    - name: Create directory for apt keyrings
+      file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: '0755'
+
+    - name: Download Kubernetes GPG key
+      get_url:
+        url: https://pkgs.k8s.io/core:/stable:/v1.33/deb/Release.key
+        dest: "{{ kubernetes_keyring }}"
+        mode: '0644'
+        force: yes
+
+    - name: Add Kubernetes apt repository
+      copy:
+        dest: /etc/apt/sources.list.d/kubernetes.list
+        content: "deb [signed-by={{ kubernetes_keyring }}] https://pkgs.k8s.io/core:/stable:/v1.33/deb/ /"
+
+    - name: Update apt after adding Kubernetes repo
+      apt:
+        update_cache: yes
+
+    - name: Install kubelet, kubeadm, and kubectl
+      apt:
+        name:
+          - "kubelet={{ kube_version }}"
+          - "kubeadm={{ kube_version }}"
+          - "kubectl={{ kube_version }}"
+        state: present
+
+    - name: Hold Kubernetes packages at specific version
+      apt:
+        name:
+          - kubelet
+          - kubeadm
+          - kubectl
+        state: present
+        mark: hold
+
+    # ENABLE IP FORWARDING #
+    - name: Enable IP packet forwarding temporarily
+      sysctl:
+        name: net.ipv4.ip_forward
+        value: 1
+        state: present
+        reload: yes
+
+    - name: Ensure IP forwarding is enabled after reboot
+      lineinfile:
+        path: /etc/sysctl.conf
+        regexp: '^#?net\.ipv4\.ip_forward=.*'
+        line: 'net.ipv4.ip_forward=1'
+        state: present

@@ -56,3 +56,8 @@ variable "ansible_public_key" {
   type        = string
   sensitive   = true
 }
+variable "vm_password" {
+  type        = string
+  description = "Password for root"
+  sensitive   = true
+}
