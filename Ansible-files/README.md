@@ -341,10 +341,17 @@ kubernetes_common.yaml
         mode: ''0644
         force: yes
 
-    - name: Add Kubernetes apt repository
+    - name: Convert GPG key to binary
+      command: gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg /etc/apt/keyrings/kubernetes-apt-keyring.asc
+      args:
+        creates: /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+
+    - name: Add Kubernetes APT repository
       copy:
         dest: /etc/apt/sources.list.d/kubernetes.list
-        content: "deb [signed-by={{ kubernetes_keyring }}] https://pkgs.k8s.io/core:/stable:/v1.33/deb/ /"
+        content: |
+          deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.33/deb/ /
+        mode: '0644'
 
     - name: Update apt after adding Kubernetes repo
       apt:
