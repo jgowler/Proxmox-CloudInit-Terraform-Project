@@ -1,3 +1,124 @@
 ---
+- name: Kubernetes Node Setup
+  hosts: all
+  become: true
+  vars:
+    containerd_config_path: "/etc/containerd/config.toml"
+    kubernetes_repo_key: "/etc/apt/keyrings/kubernetes-apt-keyring.gpg"
+    kubernetes_repo_file: "/etc/apt/sources.list.d/kubernetes.list"
 
-to be added
+  tasks:
+
+    - name: Update cache
+      apt:
+        update_cache: yes
+
+    - name: Install Containerd
+      apt:
+        name: containerd
+        state: present
+
+    - name: Ensure /etc/containerd directory exists
+      file:
+        path: /etc/containerd
+        state: directory
+
+    - name: Generate default containerd configuration
+      command: containerd config default
+      register: containerd_default_config
+      changed_when: false
+
+    - name: Write containerd config with systemd cgroup and pause image
+      copy:
+        content: "{{ containerd_default_config.stdout | regex_replace('SystemdCgroup = false', 'SystemdCgroup = true') | regex_replace('sandbox_image = \".*\"', 'sandbox_image = \"registry.k8s.io/pause:3.10\"') }}"
+        dest: "{{ containerd_config_path }}"
+        owner: root
+        group: root
+        mode: '0644'
+      notify:
+        - Restart containerd
+
+    - name: Ensure containerd service is enabled and started
+      systemd:
+        name: containerd
+        enabled: yes
+        state: restarted
+
+    - name: Disable swap temporarily
+      command: swapoff -a
+      ignore_errors: yes
+
+    - name: Disable swap permanently in fstab
+      replace:
+        path: /etc/fstab
+        regexp: '^(.*\s+swap\s+.*)$'
+        replace: '#\1'
+
+    - name: Install dependencies for Kubernetes repository
+      apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - gnupg
+          - gpg
+        state: present
+
+    - name: Ensure keyrings directory exists
+      file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: '0755'
+
+    - name: Download and install Kubernetes GPG key (dearmored)
+      shell: |
+        curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.34/deb/Release.key | \
+        gpg --dearmor | tee /etc/apt/keyrings/kubernetes-apt-keyring.gpg > /dev/null
+      args:
+        creates: /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+
+    - name: Add Kubernetes apt repository
+      copy:
+        dest: "{{ kubernetes_repo_file }}"
+        content: |
+          deb [signed-by={{ kubernetes_repo_key }} arch=amd64 trusted=yes] https://pkgs.k8s.io/core:/stable:/v1.34/deb/ /
+
+    - name: Update apt cache after adding Kubernetes repo
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Check kubelet availability
+      shell: apt-cache policy kubelet
+      register: kubelet_policy
+      changed_when: false
+
+    - name: Show kubelet policy
+      debug:
+        var: kubelet_policy.stdout_lines
+
+    - name: Install Kubernetes components
+      apt:
+        name:
+          - kubelet
+          - kubeadm
+          - kubectl
+        state: present
+        update_cache: yes
+
+    - name: Hold Kubernetes packages at the installed version
+      shell: apt-mark hold kubelet kubeadm kubectl
+      changed_when: false
+
+    - name: Enable IP forwarding
+      sysctl:
+        name: net.ipv4.ip_forward
+        value: 1
+        state: present
+        reload: yes
+
+  handlers:
+    - name: Restart containerd
+      systemd:
+        name: containerd
+        state: restarted

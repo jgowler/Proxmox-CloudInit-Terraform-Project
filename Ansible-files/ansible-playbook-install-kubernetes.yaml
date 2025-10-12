@@ -1,3 +1,4 @@
+---
 - name: Apply common tasks to all nodes
   import_playbook: kubernetes_common.yaml
 

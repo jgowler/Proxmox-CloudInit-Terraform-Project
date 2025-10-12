@@ -1,3 +1,118 @@
 ---
+- name: Initialize Kubernetes Control Plane with containerd and Calico
+  hosts: masters
+  become: true
+  vars:
+    pod_network_cidr: "192.168.0.0/16"
+    cri_socket: "unix:///run/containerd/containerd.sock"
+    calico_manifest_url: "https://raw.githubusercontent.com/projectcalico/calico/v3.27.0/manifests/calico.yaml"
+    kube_config_path: "/etc/kubernetes/admin.conf"
+    join_command_file: "/tmp/kubeadm_join_cmd.sh"
 
-to be added
+  tasks:
+    - name: Check if Kubernetes is already initialized
+      stat:
+        path: /etc/kubernetes/manifests/kube-apiserver.yaml
+      register: kube_apiserver_manifest
+
+    - name: Initialize Kubernetes cluster
+      command: >
+        kubeadm init
+        --pod-network-cidr={{ pod_network_cidr }}
+        --cri-socket={{ cri_socket }}
+      when: not kube_apiserver_manifest.stat.exists
+      register: kubeadm_init
+      changed_when: "'Your Kubernetes control-plane has initialized successfully!' in kubeadm_init.stdout"
+
+    - name: Display kubeadm init output
+      debug:
+        var: kubeadm_init.stdout_lines
+      when: not kube_apiserver_manifest.stat.exists
+
+    - name: Extract kubeadm join command from init output
+      when: not kube_apiserver_manifest.stat.exists
+      shell: |
+        echo "{{ kubeadm_init.stdout }}" | grep -A2 "kubeadm join" | grep "kubeadm join" | head -n 1 > {{ join_command_file }}
+      args:
+        executable: /bin/bash
+
+    - name: Generate kubeadm join command (if cluster already exists)
+      when: kube_apiserver_manifest.stat.exists
+      shell: |
+        kubeadm token create --print-join-command > {{ join_command_file }}
+      args:
+        executable: /bin/bash
+
+    - name: Read and register join command
+      slurp:
+        src: "{{ join_command_file }}"
+      register: join_cmd_raw
+
+    - name: Set join command fact for later use
+      set_fact:
+        kubeadm_join_command: "{{ join_cmd_raw.content | b64decode | trim }}"
+
+    - name: Ensure .kube directory exists for Ansible user
+      file:
+        path: "/home/{{ ansible_user }}/.kube"
+        state: directory
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: '0755'
+
+    - name: Copy admin.conf to Ansible user's kube config
+      copy:
+        src: /etc/kubernetes/admin.conf
+        dest: "/home/{{ ansible_user }}/.kube/config"
+        remote_src: true
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: '0644'
+
+    - name: Add KUBECONFIG to Ansible user's bash profile
+      lineinfile:
+        path: "/home/{{ ansible_user }}/.bashrc"
+        line: 'export KUBECONFIG=$HOME/.kube/config'
+        create: yes
+        state: present
+
+    - name: Apply Calico CNI network plugin
+      shell: |
+        export KUBECONFIG=/etc/kubernetes/admin.conf
+        kubectl apply -f {{ calico_manifest_url }}
+      become: true
+      register: calico_apply
+      changed_when: "'configured' in calico_apply.stdout or 'created' in calico_apply.stdout"
+
+    - name: Display Calico deployment result
+      debug:
+        msg: "{{ calico_apply.stdout_lines }}"
+
+    - name: Save join command to Ansible fact file for workers
+      local_action:
+        module: copy
+        content: "{{ kubeadm_join_command }}"
+        dest: "./kubeadm_join_cmd.txt"
+      run_once: true
+
+    - name: Ensure kubelet systemd drop-in directory exists
+      file:
+        path: /etc/systemd/system/kubelet.service.d
+        state: directory
+        mode: '0755'
+
+    - name: Configure kubelet to use containerd
+      copy:
+        dest: /etc/systemd/system/kubelet.service.d/10-containerd.conf
+        content: |
+          [Service]
+          Environment="KUBELET_EXTRA_ARGS=--container-runtime=remote --container-runtime-endpoint=unix:///run/containerd/containerd.sock"
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Reload systemd and restart kubelet
+      shell: |
+        systemctl daemon-reexec
+        systemctl daemon-reload
+        systemctl restart kubelet

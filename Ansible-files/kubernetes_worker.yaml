@@ -1,3 +1,72 @@
 ---
+- name: Join Kubernetes Worker Nodes to Cluster
+  hosts: workers
+  become: true
+  vars:
+    join_command_file: "./kubeadm_join_cmd.txt"
 
-to be added
+  tasks:
+    - name: Check that join command file exists on control node
+      delegate_to: localhost
+      stat:
+        path: "{{ join_command_file }}"
+      register: join_file_check
+
+    - name: Fail if join command missing
+      fail:
+        msg: "Join command file '{{ join_command_file }}' not found. Run the control plane initialization playbook first."
+      when: not join_file_check.stat.exists
+
+    - name: Load join command from control node
+      delegate_to: localhost
+      slurp:
+        src: "{{ join_command_file }}"
+      register: join_cmd_raw
+
+    - name: Set join command fact
+      set_fact:
+        kubeadm_join_command: "{{ join_cmd_raw.content | b64decode | trim }}"
+
+    - name: Check if kubelet.conf exists (node already joined)
+      stat:
+        path: /etc/kubernetes/kubelet.conf
+      register: kubelet_conf
+
+    - name: Join worker node to the Kubernetes cluster
+      command: "{{ kubeadm_join_command }}"
+      when: not kubelet_conf.stat.exists
+      register: join_output
+      changed_when: "'This node has joined the cluster' in join_output.stdout or 'already' not in join_output.stderr"
+
+    - name: Display join command output
+      debug:
+        var: join_output.stdout_lines
+      when: not kubelet_conf.stat.exists
+
+    - name: Enable and start kubelet service
+      systemd:
+        name: kubelet
+        state: started
+        enabled: true
+
+    - name: Ensure kubelet systemd drop-in directory exists
+      file:
+        path: /etc/systemd/system/kubelet.service.d
+        state: directory
+        mode: '0755'
+
+    - name: Configure kubelet to use containerd
+      copy:
+        dest: /etc/systemd/system/kubelet.service.d/10-containerd.conf
+        content: |
+          [Service]
+          Environment="KUBELET_EXTRA_ARGS=--container-runtime=remote --container-runtime-endpoint=unix:///run/containerd/containerd.sock"
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Reload systemd and restart kubelet
+      shell: |
+        systemctl daemon-reexec
+        systemctl daemon-reload
+        systemctl restart kubelet
